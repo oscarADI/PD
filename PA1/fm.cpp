@@ -154,6 +154,7 @@ class FM {
         void            update_gain(Cell*);
         void            iteration();
         bool            balanced(int);
+        void            output(const char*);
 
         // debug
         void            print_cells();
@@ -550,12 +551,12 @@ void FM::iteration()
     int sum = 0;
     int partial_sum = 0;
     int move = 0;
-    int de = 0;
-    int t0,t1;
+    int de = 1;
     vector<int> order;
     Cell* base;
     while(1)
     {
+        cout << "iteration"<<de<<"\n";
         move = partial_sum = sum = 0;
         //cout << "size0 = " << size0 << ", size1 = " << size1 << endl;
         for(int k = 0;k < nCells; k++)
@@ -620,28 +621,53 @@ void FM::iteration()
             {
                 partial_sum = sum;
                 move = k;
-                t0 = size0;
-                t1 = size1;
             }
             //cout<<"sum = "<<sum<<endl;
         }
         assert(sum == 0);
 
         if(partial_sum <= 0) break;
-        //if(de == 3) break;
         for(int l = 0; l <= move ; l++)
         {
             Cell* c = celllist[order[l]];
-            //cout << "c" << c->cellindex() << " partition = "<< c->part_num();
             c->change_part();
-            //cout<<", new part = "<<c->part_num()<<endl;
         }
-        cout<<endl;
         compute_gain();
-        de++;
         order.clear();
+        de++;
     }
     cout << "done!"<<endl;
+}
+void FM::output(const char* argv)
+{
+    ofstream outfile(argv);
+    int size = 0;
+    vector<int> c0,c1;
+    for(vector<Net*>::iterator iter = netlist.begin()+1 ; iter != netlist.end();iter++)
+    {
+        if((*iter)->partsize(0)!=0 && (*iter)->partsize(1)!=0) size++;
+    }
+    for(vector<Cell*>::iterator iter = celllist.begin()+1 ; iter!= celllist.end() ; iter++)
+    {
+        if((*iter)->part_num() == 0) c0.push_back((*iter)->cellindex());
+        else c1.push_back((*iter)->cellindex());
+    }
+    assert(c0.size()==size1);
+
+    outfile << "Cutsize = " << size << endl;
+    outfile << "G1 "<<c0.size()<<endl;
+    for(int i = 0;i < c0.size();i++)
+        outfile<<"c"<<c0[i]<<" ";
+    outfile<<";\n";
+
+    outfile << "G2 "<<c1.size()<<endl;
+    for(int i = 0;i < c1.size();i++)
+        outfile<<"c"<<c1[i]<<" ";
+    outfile<<";\n";
+
+
+
+
 }
 
 int main(int argc, char* argv[])
@@ -650,4 +676,5 @@ int main(int argc, char* argv[])
     fm->parser(argv[1]);
     fm->compute_gain();
     fm->iteration();
+    fm->output(argv[2]);
 }
