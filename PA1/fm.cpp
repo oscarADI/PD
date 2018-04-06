@@ -14,10 +14,12 @@ class Net {
         Net() 
         {
             index = 0;
+            lock0 = lock1 = 0;
         }
         Net(int n)
         {
             index = n;
+            lock0 = lock1 = 0;
         }
         ~Net() {}
 
@@ -28,9 +30,12 @@ class Net {
         int netindex() { return index; }
         int partsize(int i) { if(!i) return cellsin0.size(); else return cellsin1.size(); }
         int partcellbegin(int i) { if(!i) return cellsin0[0]; else return cellsin1[0]; }
+        bool lock() { return (lock0 && lock1); }
         void renew() {
             cellsin0.clear();
             cellsin1.clear();
+            lock0 = 0;
+            lock1 = 0;
         }
         void pushpart(int n, int i) 
         {
@@ -51,10 +56,11 @@ class Net {
                 }
                 assert(it != cellsin0.end());
                 cellsin0.erase(it);
-                it = find(cellsin1.begin(),cellsin1.end(),n);
-                if(it != cellsin1.end()) {cout<<n<<endl;print();}
-                assert(it == cellsin1.end());
+                // it = find(cellsin1.begin(),cellsin1.end(),n);
+                // if(it != cellsin1.end()) {cout<<n<<endl;print();}
+                // assert(it == cellsin1.end());
                 cellsin1.push_back(n);
+                lock1 = 1;
             }
             else
             {
@@ -63,10 +69,11 @@ class Net {
                 it = find(cellsin1.begin(),cellsin1.end(),n);
                 assert(it != cellsin1.end());
                 cellsin1.erase(it);
-                it = find(cellsin0.begin(),cellsin0.end(),n);
-                if(it != cellsin0.end()) {cout<<n<<endl;print();}
-                assert(it == cellsin0.end());
+                // it = find(cellsin0.begin(),cellsin0.end(),n);
+                // if(it != cellsin0.end()) {cout<<n<<endl;print();}
+                // assert(it == cellsin0.end());
                 cellsin0.push_back(n);
+                lock0 = 1;
             }
             //cout<<endl<<endl;
         }
@@ -87,6 +94,8 @@ class Net {
         vector<int>     cells;
         vector<int>     cellsin0;
         vector<int>     cellsin1;
+        int             lock0;
+        int             lock1;
 };
 
 class Cell {
@@ -183,19 +192,14 @@ class FM {
 };
 bool FM::balanced(int n)
 {
-    int s0 = size0;
-    int s1 = size1;
-    if(n) 
+    if(!n) 
     {
-        s0+=1;
-        s1-=1;
+        return ((size0-1) >= lowerbound );
     }
     else
     {
-        s0-=1;
-        s1+=1;
+        return ((size1-1) >= lowerbound );
     }
-    return ((s0>=lowerbound)&&(s0<=upperbound)&&(s1>=lowerbound)&&(s1<=upperbound));
 }
 void FM::print_cells()
 {
@@ -207,6 +211,8 @@ void FM::print_cells()
         }
     }
 }
+
+bool compare(Cell* i, Cell* j) {return (i->Psize()>j->Psize());}
 
 void FM::parser (const char* argv)
 {
@@ -269,27 +275,56 @@ void FM::parser (const char* argv)
             }
         }
     }
-    for(vector<Cell*>::iterator iter = celllist.begin()+1; iter != celllist.end(); iter++)
-    {
-        Pmax = max(Pmax,(*iter)->Psize());
-        if((*iter)->cellindex() <= nCells/2) 
-        {
-            (*iter)->assign_part(0);
-            size0++;
-        }
-        else 
-        {
-            (*iter)->assign_part(1);
-            size1++;
-        }
-    }
-
-    list0.resize(2*Pmax+1);
-    list1.resize(2*Pmax+1);
-    Gmax0 = Gmax1 = -Pmax;
     lowerbound = (1-degree) * nCells / 2;
     upperbound = (1+degree) * nCells / 2;
 
+    vector<Cell*> t = celllist;
+    sort(t.begin()+1,t.end(),compare);
+    
+    for(vector<Cell*>::iterator iter = t.begin()+1; iter != t.end(); iter++)
+    {
+         Pmax = max(Pmax, (*iter)->Psize());
+        if(size0 < nCells/2)
+        {
+            for(int i = 0;i < (*iter)->Psize();i++)
+            {
+                Net* n = netlist[(*iter)->net(i)];
+                for(int j = 0;j < n->cellsize();j++)
+                {
+                    if(size0 == nCells/2) break;
+                    Cell* c = celllist[n->cell(j)];
+                    if(c->part_num() == -1)
+                    {
+                        c->assign_part(0);
+                        size0++;
+                    }
+                }
+            }
+        }
+        else 
+        {
+            if((*iter)->part_num() == -1)
+            {
+                (*iter)->assign_part(1);
+                size1++;
+            }
+        }
+        //cout<<"size1 = "<<size1<<endl;
+        // if((*iter)->cellindex() <= nCells/2) 
+        // {
+        //     (*iter)->assign_part(0);
+        //     size0++;
+        // }
+        // else 
+        // {
+        //     (*iter)->assign_part(1);
+        //     size1++;
+        // }
+
+    }
+    list0.resize(2*Pmax+1);
+    list1.resize(2*Pmax+1);
+    Gmax0 = Gmax1 = -Pmax;
 }
 
 void FM::compute_gain()
@@ -349,6 +384,7 @@ void FM::compute_gain()
     size0 = size1 = 0;
     for(vector<Cell*>::iterator iter = celllist.begin()+1; iter != celllist.end(); iter++)
     {
+        if((*iter)->part_num() == -1) (*iter)->assign_part(0);
         if((*iter)->part_num() == 0)
         {
             list0[(*iter)->gain_num()+Pmax].push_back((*iter)->cellindex());
@@ -362,18 +398,21 @@ void FM::compute_gain()
             size1++;  
         }
     }
-    // for(vector<Cell*>::iterator iter = celllist.begin()+1; iter != celllist.end(); iter++)
-    //     cout << "c" << (*iter)->cellindex() << " gain = " << (*iter)->gain_num()<<endl;
-    // cout << "Pmax = " << Pmax << " Gmax0 = " << Gmax0 << " Gmax1 = " << Gmax1 <<endl;
 }
 
 void FM::update_gain(Cell* base)
 {
     base->makelock();
     int init_part = base->part_num();
+    //vector<int> up;
+    //int update[500000] = {0};
     for(int i = 0 ; i < base->Psize() ; i++)
     {
         Net* tmp = netlist[base->net(i)];
+        if(tmp->lock()) 
+        {
+            continue;
+        }
         Cell* c;
         if(init_part == 0)
         {
@@ -384,12 +423,6 @@ void FM::update_gain(Cell* base)
                     if(!c->lock())
                     {
                         int g = c->gain_num() + Pmax;
-
-
-                        assert(c->part_num() == 0);
-                        list<int>::iterator it = find(list0[g].begin(),list0[g].end(),c->cellindex());
-                        assert(it != list0[g].end());
-
                         list0[g].remove(c->cellindex());
                         c->change_gain(1);
                         list0[g+1].push_back(c->cellindex());
@@ -403,11 +436,6 @@ void FM::update_gain(Cell* base)
                 if(!c->lock())
                 { 
                     int g = c->gain_num() + Pmax;
-
-                    assert(c->part_num() == 1);
-                    list<int>::iterator it = find(list1[g].begin(),list1[g].end(),c->cellindex());
-                    assert(it != list1[g].end());
-
                     list1[g].remove(c->cellindex());
                     c->change_gain(-1);
                     list1[g-1].push_back(c->cellindex());
@@ -426,11 +454,6 @@ void FM::update_gain(Cell* base)
                     if(!c->lock())
                     {
                         int g = c->gain_num() + Pmax;
-
-                    assert(c->part_num() == 1);
-                    list<int>::iterator it = find(list1[g].begin(),list1[g].end(),c->cellindex());
-                    assert(it != list1[g].end());
-
                         list1[g].remove(c->cellindex());
                         c->change_gain(1);
                         list1[g+1].push_back(c->cellindex());
@@ -444,11 +467,6 @@ void FM::update_gain(Cell* base)
                 if(!c->lock())
                 { 
                     int g = c->gain_num() + Pmax;
-
-                    assert(c->part_num() == 0);
-                    list<int>::iterator it = find(list0[g].begin(),list0[g].end(),c->cellindex());
-                    assert(it != list0[g].end());
-
                     list0[g].remove(c->cellindex());
                     c->change_gain(-1);
                     list0[g-1].push_back(c->cellindex());
@@ -469,11 +487,6 @@ void FM::update_gain(Cell* base)
                     if(!c->lock())
                     {
                         int g = c->gain_num() + Pmax;
-
-                    assert(c->part_num() == 1);
-                    list<int>::iterator it = find(list1[g].begin(),list1[g].end(),c->cellindex());
-                    assert(it != list1[g].end());
-
                         list1[g].remove(c->cellindex());
                         c->change_gain(-1);
                         list1[g-1].push_back(c->cellindex());
@@ -488,11 +501,6 @@ void FM::update_gain(Cell* base)
                 if(!c->lock())
                 { 
                     int g = c->gain_num() + Pmax;
-
-                    assert(c->part_num() == 0);
-                    list<int>::iterator it = find(list0[g].begin(),list0[g].end(),c->cellindex());
-                    assert(it != list0[g].end());
-
                     list0[g].remove(c->cellindex());
                     c->change_gain(1);
                     list0[g+1].push_back(c->cellindex());
@@ -511,11 +519,6 @@ void FM::update_gain(Cell* base)
                     if(!c->lock())
                     {
                         int g = c->gain_num() + Pmax;
-
-                        assert(c->part_num() == 0);
-                        list<int>::iterator it = find(list0[g].begin(),list0[g].end(),c->cellindex());
-                        assert(it != list0[g].end());
-
                         list0[g].remove(c->cellindex());
                         c->change_gain(-1);
                         list0[g-1].push_back(c->cellindex());
@@ -525,16 +528,10 @@ void FM::update_gain(Cell* base)
             }
             else if(tmp->partsize(1) == 1)
             {
-                //cout << "1111\n";
                 c = celllist[tmp->partcellbegin(1)];
                 if(!c->lock())
                 { 
                     int g = c->gain_num() + Pmax;
-
-                    assert(c->part_num() == 1);
-                    list<int>::iterator it = find(list1[g].begin(),list1[g].end(),c->cellindex());
-                    assert(it != list1[g].end());
-
                     list1[g].remove(c->cellindex());
                     c->change_gain(1);
                     list1[g+1].push_back(c->cellindex());
@@ -547,7 +544,7 @@ void FM::update_gain(Cell* base)
 
 void FM::iteration()
 {
-    cout << "iteration!\n";
+    cout << "iteration! number of cells = " << nCells<<endl;
     int sum = 0;
     int partial_sum = 0;
     int move = 0;
@@ -556,12 +553,14 @@ void FM::iteration()
     Cell* base;
     while(1)
     {
-        cout << "iteration"<<de<<"\n";
+        cout << "iteration"<<de<<", ";
         move = partial_sum = sum = 0;
         //cout << "size0 = " << size0 << ", size1 = " << size1 << endl;
         for(int k = 0;k < nCells; k++)
         {
-            //cout << "k = "<<k<<", Gmax0 = "<<Gmax0<<", Gmax1 = "<<Gmax1<<", Pmax = "<<Pmax<<", g = ";
+            // cout << "k = "<<k<<", Gmax0 = "<<Gmax0<<", Gmax1 = "<<Gmax1<<", Pmax = "<<Pmax<<", g = ";
+            //   cout << "size0 = "<<size0<<", size1 = "<<size1<< ", lowerbound = "<<lowerbound<<endl;
+            //   return;
             if( ( (Gmax0 >= Gmax1) && (balanced(0)) )  || ( (Gmax0 < Gmax1) && (!balanced(1) ) ) )
             {
                 assert(list0[Gmax0].size());
@@ -622,10 +621,10 @@ void FM::iteration()
                 partial_sum = sum;
                 move = k;
             }
-            //cout<<"sum = "<<sum<<endl;
+            // cout<<"sum = "<<sum<<endl;
         }
         assert(sum == 0);
-
+        cout << "partial_sum = " << partial_sum << endl;
         if(partial_sum <= 0) break;
         for(int l = 0; l <= move ; l++)
         {
@@ -652,7 +651,6 @@ void FM::output(const char* argv)
         if((*iter)->part_num() == 0) c0.push_back((*iter)->cellindex());
         else c1.push_back((*iter)->cellindex());
     }
-    assert(c0.size()==size1);
 
     outfile << "Cutsize = " << size << endl;
     outfile << "G1 "<<c0.size()<<endl;
