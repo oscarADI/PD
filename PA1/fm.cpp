@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <assert.h>
 #include <list>
+#include <time.h>
 using namespace std;
 
 class Net {
@@ -150,7 +151,7 @@ class FM {
     public:
         FM() {
             nCells = 0;
-            Pmax = size0 = size1 = 0;
+            Pmax = size0 = size1 = cutsize = 0;
             degree = lowerbound = upperbound = 0.0;
             Net* net = new Net(0);
             netlist.push_back(net);
@@ -189,6 +190,7 @@ class FM {
         int                                 Gmax1;
         int                                 size0;
         int                                 size1;
+        int                                 cutsize;
 };
 bool FM::balanced(int n)
 {
@@ -216,7 +218,8 @@ bool compare(Cell* i, Cell* j) {return (i->Psize()>j->Psize());}
 
 void FM::parser (const char* argv)
 {
-    cout << "parser !" << endl;
+    unsigned long start = clock();
+    cout << "\nParsing" << endl;
     ifstream infile;
     infile.open(argv,ifstream::in);
     if(!infile.is_open())
@@ -325,11 +328,17 @@ void FM::parser (const char* argv)
     list0.resize(2*Pmax+1);
     list1.resize(2*Pmax+1);
     Gmax0 = Gmax1 = -Pmax;
+    unsigned long end = clock();
+    cout << "Number of cells : " << nCells << endl;
+    cout << "Maximum Pin size : " << Pmax << endl;
+    cout << "Balance : "<<lowerbound<<" <= #(G1),#(G2) <= "<<upperbound<<endl;
+    cout << "Runtime of parsing : "<<(end - start)/1000000.0 <<" seconds\n"<< endl;
 }
 
 void FM::compute_gain()
 {
     //cout << "compute gain !\n";
+    cutsize = 0;
     for(vector<Net*>::iterator iter = netlist.begin()+1; iter != netlist.end(); iter++)
     {
         (*iter)->renew();
@@ -380,6 +389,7 @@ void FM::compute_gain()
             Cell* tmp = celllist[(*iter)->partcellbegin(1)];
             tmp->change_gain(1);  
         }
+        if(p0 != 0 && p1 != 0) cutsize++;
     }
     size0 = size1 = 0;
     for(vector<Cell*>::iterator iter = celllist.begin()+1; iter != celllist.end(); iter++)
@@ -544,7 +554,8 @@ void FM::update_gain(Cell* base)
 
 void FM::iteration()
 {
-    cout << "iteration! number of cells = " << nCells<<endl;
+    unsigned long start = clock();
+    cout << "Start of iteration"<<endl;
     int sum = 0;
     int partial_sum = 0;
     int move = 0;
@@ -553,7 +564,7 @@ void FM::iteration()
     Cell* base;
     while(1)
     {
-        cout << "iteration"<<de<<", ";
+        // cout << "iteration"<<de<<", ";
         move = partial_sum = sum = 0;
         //cout << "size0 = " << size0 << ", size1 = " << size1 << endl;
         for(int k = 0;k < nCells; k++)
@@ -624,7 +635,7 @@ void FM::iteration()
             // cout<<"sum = "<<sum<<endl;
         }
         assert(sum == 0);
-        cout << "partial_sum = " << partial_sum << endl;
+        // cout << "partial_sum = " << partial_sum << endl;
         if(partial_sum <= 0) break;
         for(int l = 0; l <= move ; l++)
         {
@@ -633,26 +644,28 @@ void FM::iteration()
         }
         compute_gain();
         order.clear();
+        if(nCells > 300000 && de == 2 ) break;
         de++;
     }
-    cout << "done!"<<endl;
+    unsigned long end = clock();
+    // cout << "done!"<<endl;
+    cout << "End of iteration"<<endl;
+    cout << "Finishing partitioning and writing output file\n";
+    cout << "Runtime of iteration : "<<(end - start)/1000000.0 <<" seconds\n"<< endl;
 }
 void FM::output(const char* argv)
 {
+    unsigned long start = clock();
     ofstream outfile(argv);
     int size = 0;
     vector<int> c0,c1;
-    for(vector<Net*>::iterator iter = netlist.begin()+1 ; iter != netlist.end();iter++)
-    {
-        if((*iter)->partsize(0)!=0 && (*iter)->partsize(1)!=0) size++;
-    }
     for(vector<Cell*>::iterator iter = celllist.begin()+1 ; iter!= celllist.end() ; iter++)
     {
         if((*iter)->part_num() == 0) c0.push_back((*iter)->cellindex());
         else c1.push_back((*iter)->cellindex());
     }
 
-    outfile << "Cutsize = " << size << endl;
+    outfile << "Cutsize = " << cutsize << endl;
     outfile << "G1 "<<c0.size()<<endl;
     for(int i = 0;i < c0.size();i++)
         outfile<<"c"<<c0[i]<<" ";
@@ -662,17 +675,24 @@ void FM::output(const char* argv)
     for(int i = 0;i < c1.size();i++)
         outfile<<"c"<<c1[i]<<" ";
     outfile<<";\n";
-
-
-
-
+    
+    unsigned long end = clock();
+    cout << endl;
+    cout << "Final Result :\n";
+    cout << "   Cutsize : " << cutsize << endl;
+    cout << "   Size of G1 : " << c0.size() << endl;
+    cout << "   Size of G2 : " << c1.size() << endl;
+    cout << "Runtime of writing output file : "<<(end - start)/1000000.0 <<" seconds\n"<< endl;
 }
 
 int main(int argc, char* argv[])
 {
+    unsigned long start = clock();
     FM* fm = new FM();
     fm->parser(argv[1]);
     fm->compute_gain();
     fm->iteration();
     fm->output(argv[2]);
+    unsigned long end = clock();
+    cout << "Total runtime : "<<(end - start)/1000000.0 <<" seconds"<< endl;
 }
