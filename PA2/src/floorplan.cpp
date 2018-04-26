@@ -321,7 +321,7 @@ double Floorplan::Cost()
     double R = Hrs/Wrs - Hr/Wr;
 
     cost =  (alpha*finalX*finalY/A_norm) + //((1-alpha-0.1)*HPWL()/W_norm) + ;
-            (1-alpha-0.1)*R*R;
+            (1-alpha-beta)*R*R;
     return cost;
 }
 int Floorplan::getRand()
@@ -338,7 +338,7 @@ void Floorplan::perturb()
     {
         
         int target = getRand()%numblocks;
-        cout << "rotate "<<target<<" ";
+        //cout << "rotate "<<target<<" ";
         blocks[target]->setrotate();
     }
     else if(op == 1)
@@ -346,7 +346,7 @@ void Floorplan::perturb()
         int t1 = getRand()%numblocks;
         int t2 = getRand()%numblocks;
         while(t1 == t2) t2 = getRand()%numblocks;
-        cout << "delete "<<t1<< " to " << t2 <<" ";
+        //cout << "delete "<<t1<< " to " << t2 <<" ";
         deletenode(t1);
         insertnode(t1,t2);   
     }
@@ -356,7 +356,7 @@ void Floorplan::perturb()
         int t2 = getRand()%numblocks;
         while(t1 == t2) t2 = getRand()%numblocks;
         swapnode(t1,t2);
-        cout << "swap "<<t1<<"&"<<t2<<" ";
+        //cout << "swap "<<t1<<"&"<<t2<<" ";
     }
     clearpack();
     packing(root);
@@ -569,12 +569,13 @@ void Floorplan::store_best()
     }
     best->_cost = cost;
     best->_root = root;
+    best->_costori = (alpha_base*finalX*finalY/A_norm) + (1-alpha_base)*HPWL()/W_norm;
     best->outx = finalX;
     best->outy = finalY;
 }
 void Floorplan::turnback()
 {
-    cout << "turnback\n";
+    // cout << "turnback\n";
     for(int i = 0;i < numblocks;i++)
     {
         *blocks[i] = last->blo[i];
@@ -586,42 +587,69 @@ void Floorplan::turnback()
 }
 void Floorplan::SA()
 {
+    cout << "SA\n";
     // init
     double p = 0.99;
-    int k = 8;
+    int k = 7;
     double r = 0.985;
     double ep = 0.00001;
     double reject = 0;
     int N = k*numblocks;
     double MT = 0,uphill = 0;
-    double T = abs(davg(N)/log(p));
+    perturb();
+    Cost();
+    // last = new Result();
+    // best = new Result();
+    // store_result();
+    // store_best();
+    double T1 = fabs(davg(N)/log(p));
+    double T = T1;
+    int n = 1;
+
+    // cost components
+    alpha = alpha_base;
+    beta = 0;
 
     int change = 0;
+    int feasible = 0;
+    double avgcost = 0;
+    
+  
     //simulate
+    cout << "base = "<<alpha_base<<endl;
+    //return;
     while(1)
     {
-        MT = uphill = reject = 0;
-        cout << "T = "<<T<<endl;
+        MT = uphill = reject = feasible = 0;
+        // cout << "n = " << n << endl;
+        n++;
         while(1)
         {
             double prev = cost;
+            // cout << "prev = "<<prev;
             perturb();
             Cost();
+            // cout << "  best : "<<best->_cost << "\t cost = "<<cost<<endl;
             MT++;
             double dcost = cost - prev;
+            avgcost += abs(dcost);
             p = min(1.0,exp(-1*dcost/T));
-            cout << "dcost = " << dcost << " p = "<<p<<endl;;
             if(dcost <= 0 || (getRand()%100+1)/100 < p)
             {
                 if(dcost > 0) uphill++;
                 store_result();
-                cout << "Cost = " << cost << endl;
                 if(cost < best->_cost) 
                 {
+                    // cout << "HI\n";
                     if(fitoutline())
                     {
+                        cout << "new best\n";
                         store_best();
                         change++;
+                        // cout << "base = "<<alpha_base;
+                        // cout << " before " << alpha;
+                        alpha = alpha_base + (1-alpha_base)*change/2/N;
+                        // cout << "  after " << alpha << endl;
                     }
                 }
             }
@@ -630,11 +658,29 @@ void Floorplan::SA()
                 turnback();
                 reject++;
             }
+            // Modify alpha
+            // if(fitoutline()) 
+            // {
+            //     feasible++;
+            //     alpha = alpha_base + (1-alpha_base)*feasible/2/N;
+            // }
+
             if(uphill > N || MT > 2*N) break;
         }
-        T *= r;
-        if(reject/MT > 0.95){ cout << "reject\n"; break;}
-        if(T < ep) { cout << "ep\n"; break;}
+        // break;
+        // update T
+        avgcost /= MT;
+
+        if(n >= 2 && n <= k) T = T1*avgcost/n/100;
+        else T = T1*avgcost/n;
+
+        if(reject/MT > 0.95 || T < ep ){ 
+            if(change != 0) break;
+            n = 0;
+            T = T1;
+            p = 0.99;
+            alpha = alpha_base;
+        }
     }
     cout << "Best!\n";
     for(int i = 0;i < numblocks;i++)
@@ -642,7 +688,8 @@ void Floorplan::SA()
         Block b = best->blo[i];
         cout << b.getname() << " x = " << b.getxy(0) << ", y = "<<b.getxy(1)<<", rotate: "<<b.getrotate()<<endl;
     }
-    cout << "cost = " << best->_cost << endl;
+    cout << "cost = " << best->_costori << endl;
+    cout << "area = " << best->outx*best->outy << endl;
     cout << endl;
 }
 double Floorplan::davg(int t)
