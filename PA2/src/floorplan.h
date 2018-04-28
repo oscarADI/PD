@@ -11,7 +11,9 @@
 #include<cassert>
 #include<cstdlib>
 #include<random>
-//#include"gnuplot-iostream.h"
+#include<cfloat>
+// #include"gnuplot-iostream/gnuplot-iostream.h"
+// #include<boost/tuple/tuple.hpp>
 using namespace std;
 
 class Block{
@@ -63,6 +65,7 @@ class Block{
             x = y = 0;
             next = prev = -1;
         }
+        void flip() {swap(x,y);swap(width,height);}
 
     private:
         int id;
@@ -94,6 +97,7 @@ class Terminal{
         }
         string getname() {return name;}
         double getxy(int i) {return (i==0) ? x : y; }
+        void flip() {swap(x,y);}
     private:
         string name;
         int id;
@@ -185,15 +189,18 @@ class Result{
         vector<Block> blo;
         vector<Node> no;
         double _cost;
+        double _costori;
         int _root;
         double outx;
         double outy;
+        double hpwl;
 };
 
 class Floorplan{
     public:
-        Floorplan(double a) {
-            alpha = a;
+        Floorplan() {
+            alpha_base = 0;
+            alpha = beta = 0;
             root = 0;
             finalX = finalY = 0;
             A_norm = W_norm = 0;
@@ -203,6 +210,8 @@ class Floorplan{
         }
         ~Floorplan() {}
 
+        void seta(const char* c) {alpha = alpha_base = stod(c);}
+        void setb(const char* c) {beta = stod(c);}
         void parser_block(const char*);
         void parser_net(const char*);
         void debug();
@@ -213,6 +222,7 @@ class Floorplan{
         void compute_norm();
         int getRand();
         void turnback();
+        void turnbackbest();
 
         // B*tree
         void init_tree();
@@ -232,10 +242,15 @@ class Floorplan{
         void SA();
         double davg(int t);
         bool fitoutline();
+        void output(double, const char*);
+        void check();
+        
         
     
     private:
         double alpha;
+        double alpha_base;
+        double beta;
         double outlineX;
         double outlineY;
         int numblocks;

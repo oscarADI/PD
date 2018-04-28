@@ -2,18 +2,16 @@
 
 void Floorplan::debug()
 {
-    for(int i = 0;i < 10;i++)
+    double area = 0;
+    for(int i = 0;i < numblocks;i++)
     {
-        perturb();
-        Cost();
-        cout << endl;
-        for(int i = 0;i < numblocks;i++)
-        {
-            Block b = *blocks[i];
-            cout << b.getname() << " x = " << b.getxy(0) << ", y = "<<b.getxy(1)<<", rotate: "<<b.getrotate()<<endl;
-        }
-        cout << endl;
+        Block b = *blocks[i];
+        area += b.getwidth()*b.getheight();
     }
+    cout << "total area = " << area << endl;
+    cout << "outline = " << outlineX*outlineY<<endl;
+    cout << "ratio = " << (outlineX*outlineY-area) / (outlineX*outlineY) << endl;
+
     // cout << "Outline: "<<outlineX<<" "<<outlineY<<endl;
     // cout << "NumBlocks: "<<numblocks<<endl;
     // cout << "NumTerminals: "<<numterminals<<endl;
@@ -320,7 +318,7 @@ double Floorplan::Cost()
     if(Wrs < Hrs) swap(Wrs,Hrs);
     double R = Hrs/Wrs - Hr/Wr;
 
-    cost =  (alpha*finalX*finalY/A_norm) + //((1-alpha-0.1)*HPWL()/W_norm) + ;
+    cost =  (alpha*finalX*finalY/A_norm) + (beta*HPWL()/W_norm) + 
             (1-alpha-beta)*R*R;
     return cost;
 }
@@ -530,14 +528,10 @@ void Floorplan::compute_norm()
         perturb();
         w += HPWL();
         a += finalX*finalY;
+        if(fitoutline()) cout << "Fit!!\n";
     }
     W_norm = w/t;
     A_norm = a/t;
-    last = new Result();
-    best = new Result();
-    double c = Cost();
-    store_result();
-    store_best();
     cout << "W_norm = "<<W_norm<<", A_norm = "<<A_norm<<endl;
 }
 
@@ -563,15 +557,19 @@ void Floorplan::store_best()
 {
     best->blo.clear();
     best->blo.resize(numblocks);
+    best->no.clear();
+    best->no.resize(numblocks);
     for(int i = 0;i < numblocks;i++)
     {
         best->blo[i] = *blocks[i];
+        best->no[i] = *bstree[i];
     }
     best->_cost = cost;
     best->_root = root;
     best->_costori = (alpha_base*finalX*finalY/A_norm) + (1-alpha_base)*HPWL()/W_norm;
     best->outx = finalX;
     best->outy = finalY;
+    best->hpwl = HPWL();
 }
 void Floorplan::turnback()
 {
@@ -585,23 +583,33 @@ void Floorplan::turnback()
     cost = last->_cost;
     // packing(root);
 }
+void Floorplan::turnbackbest()
+{
+    for(int i = 0;i < numblocks;i++)
+    {
+        *blocks[i] = best->blo[i];
+        *bstree[i] = best->no[i];
+    }
+    root = best->_root;
+    clearpack();
+    packing(root);
+}
 void Floorplan::SA()
 {
     cout << "SA\n";
     // init
     double p = 0.99;
     int k = 7;
-    double r = 0.985;
     double ep = 0.00001;
     double reject = 0;
     int N = k*numblocks;
     double MT = 0,uphill = 0;
-    perturb();
     Cost();
-    // last = new Result();
-    // best = new Result();
-    // store_result();
-    // store_best();
+    last = new Result();
+    best = new Result();
+    store_result();
+    store_best();
+    best->_cost = DBL_MAX;
     double T1 = fabs(davg(N)/log(p));
     double T = T1;
     int n = 1;
@@ -612,17 +620,18 @@ void Floorplan::SA()
 
     int change = 0;
     int feasible = 0;
+    double count = 0;
     double avgcost = 0;
-    
   
     //simulate
     cout << "base = "<<alpha_base<<endl;
     //return;
     while(1)
     {
-        MT = uphill = reject = feasible = 0;
-        // cout << "n = " << n << endl;
+        MT = uphill = reject = 0;
         n++;
+        avgcost = count = 0;
+        // cout << "n = " << n ;
         while(1)
         {
             double prev = cost;
@@ -631,6 +640,7 @@ void Floorplan::SA()
             Cost();
             // cout << "  best : "<<best->_cost << "\t cost = "<<cost<<endl;
             MT++;
+            count++;
             double dcost = cost - prev;
             avgcost += abs(dcost);
             p = min(1.0,exp(-1*dcost/T));
@@ -640,16 +650,12 @@ void Floorplan::SA()
                 store_result();
                 if(cost < best->_cost) 
                 {
-                    // cout << "HI\n";
                     if(fitoutline())
                     {
                         cout << "new best\n";
                         store_best();
                         change++;
-                        // cout << "base = "<<alpha_base;
-                        // cout << " before " << alpha;
                         alpha = alpha_base + (1-alpha_base)*change/2/N;
-                        // cout << "  after " << alpha << endl;
                     }
                 }
             }
@@ -658,28 +664,22 @@ void Floorplan::SA()
                 turnback();
                 reject++;
             }
-            // Modify alpha
-            // if(fitoutline()) 
-            // {
-            //     feasible++;
-            //     alpha = alpha_base + (1-alpha_base)*feasible/2/N;
-            // }
-
             if(uphill > N || MT > 2*N) break;
         }
-        // break;
         // update T
-        avgcost /= MT;
-
-        if(n >= 2 && n <= k) T = T1*avgcost/n/100;
-        else T = T1*avgcost/n;
+        double ac = avgcost / count;
+        // cout << " ac = "<<ac <<endl;
+        if(n >= 2 && n <= k) T = T1*ac/n/100;
+        else T = T1*ac/n;
 
         if(reject/MT > 0.95 || T < ep ){ 
             if(change != 0) break;
-            n = 0;
+            n = 1;
             T = T1;
             p = 0.99;
             alpha = alpha_base;
+            feasible++;
+            cout << "feasible = " << feasible << endl;   
         }
     }
     cout << "Best!\n";
@@ -690,7 +690,19 @@ void Floorplan::SA()
     }
     cout << "cost = " << best->_costori << endl;
     cout << "area = " << best->outx*best->outy << endl;
+    cout << "wirelength = " << best->hpwl << endl;
     cout << endl;
+    turnbackbest();
+    for(int i = 0;i < numblocks;i++)
+    {
+        Block b = *blocks[i];
+        cout << b.getname() << " x = " << b.getxy(0) << ", y = "<<b.getxy(1)<<", rotate: "<<b.getrotate()<<endl;
+    }
+    cout << "cost = " << Cost() << endl;
+    cout << "area = " << finalX*finalY << endl;
+    cout << "wirelength = " << HPWL() << endl;
+    cout << endl;
+
 }
 double Floorplan::davg(int t)
 {
@@ -719,6 +731,7 @@ double Floorplan::davg(int t)
 }
 bool Floorplan::fitoutline()
 {
+    // cout << outlineX << " " << outlineY << " " << finalX << " " << finalY << endl;
     double x1 = max(outlineX,outlineY);
     double y1 = min(outlineX,outlineY);
     double x2 = max(finalX,finalY);
@@ -726,17 +739,130 @@ bool Floorplan::fitoutline()
 
     return (x2 <= x1) && (y2 <= y1);
 }
-/*void Floorplan::gnuplot()
+// void Floorplan::gnuplot()
+// {
+//     Gnuplot plot;
+//     double xr = 1.2*max(outlineX,outlineY), yr = xr;
+//     plot << "set xrange [" << -0.1*xr << ":" << xr << "]" << endl;
+//     plot << "set yrange [" << -0.1*xr << ":" << xr << "]" << endl;
+//     plot << "set size ratio -1" << endl;
+//     plot << "set object 2 rect from 0,0 to " << outlineX
+//          << "," << outlineY << "fc rgb \"#CCFFFF\" back" << endl;
+//     for (int i = 0; i < numblocks; ++i) {
+//         Block b = best->blo[i];
+//         plot << " set label \"" << b.getname() << "\" at "
+//              << b.getxy(0)+b.getwidth()/2 << "," << b.getxy(1)+b.getheight()/2 << endl;
+//         plot << " set object " << i + 3 << " rect from "
+//              << b.getxy(0) << ","
+//              << b.getxy(1) << " to "
+//              << b.getxy(0)+b.getwidth() << ","
+//              << b.getxy(1)+b.getheight() << " fc rgb \"green\" " << endl;
+//     }
+//     for (int i = 0; i < numterminals; ++i) {
+//         Terminal* t = terminals[i];
+//         plot << " set object " << i + 3 + numblocks << " circle at "
+//              << t->getxy(0) << "," << t->getxy(1)
+//              << " size scr 0.01 fc rgb \"navy\"" << endl;
+//     }
+//     plot << " plot \'-\' using 1:2 t \"\" with line" << endl;
+//     plot << " 0 0" << endl;
+//     plot << " e" << endl;
+//     plot << " pause -1" << endl;
+// }
+void Floorplan::output(double t, const char* argv)
 {
-    Gnuplot plot;
-    double xr = 1.2*max(outlineX,outlineY), yr = xr;
-    plot << "set xrange [" << -0.1*xr << ":" << xr << "]" << endl;
-    plot << "set yrange [" << -0.1*xr << ":" << xr << "]" << endl;
-    plot << "set size ratio -1" << endl;
-    plot << "set object 2 rect from 0,0 to " << outlineX
-         << "," << outlineY << "fc rgb \"#CCFFFF\" back" << endl;
-    plot << " plot \'-\' using 1:2 t \"\" with line" << endl;
-    plot << " 0 0" << endl;
-    plot << " e" << endl;
-    plot << " pause -1" << endl;
-}*/
+    ofstream outfile(argv);
+    // bool f = false;
+    // if(best->outx > outlineX || best->outy > outlineY) 
+    // {
+    //     cout << best->outx << " " << best->outy<<endl;
+    //     cout << outlineX << " " << outlineY << endl;
+    //     f = true;
+    // }
+    if(best->outx > outlineX || best->outy > outlineY)
+    {
+        // swap(best->outx,best->outy);
+        for (int i = 0; i < numblocks; ++i) 
+        {
+            best->blo[i].flip();
+            if(i < numterminals) terminals[i]->flip();
+        }
+    }
+
+    // <final cost>
+    outfile << best->_cost << endl;
+    // <total wirelength>
+    outfile << best->hpwl << endl;
+    // <chip_area>
+    outfile << best->outx*best->outy << endl;
+    // <chip_width><chip_height>
+    outfile << best->outx << " " << best->outy << endl;
+    // else outfile << best->outy << " " << best->outx << endl;
+    // <program_runtime>
+    outfile << t << endl;
+    double x = 0,y = 0;
+    for(int i = 0;i < numblocks;i++)
+    {
+        Block b = best->blo[i];
+        outfile << b.getname()<<"\t";
+        if(1)
+        {
+            outfile << b.getxy(0) << "\t" << b.getxy(1) << "\t";
+            outfile << b.getxy(0)+b.getwidth() << "\t" << b.getxy(1)+b.getheight() << endl;
+            y = max(y, b.getxy(1)+b.getheight());
+            x = max(x, b.getxy(0)+b.getwidth()); 
+        }
+        // else
+        // {
+        //     outfile << b.getxy(1) << "\t" << b.getxy(0) << "\t";
+        //     outfile << b.getxy(1)+b.getheight() << "\t" << b.getxy(0)+b.getwidth() << endl; 
+        //     x = max(x, b.getxy(1)+b.getheight());
+        //     y = max(y, b.getxy(0)+b.getwidth()); 
+        // }    
+    }
+    if (x != best->outx || y != best->outy)
+    {
+        cout << "x = "<<x << " best->outx = " << best->outx<<endl;
+        cout << "y = "<<y << " best->outy = " << best->outy<<endl;
+    }
+}
+
+void Floorplan::check()
+{
+    for(int i = 0;i < numblocks-1;i++)
+    {
+        for (int j = 0;j < numblocks;j++)
+        {
+            double diffx = best->blo[i].getxy(0) - best->blo[j].getxy(0);
+            double diffy = best->blo[i].getxy(1) - best->blo[j].getxy(1);
+            if(diffx >= 0 && diffy >= 0)
+            {
+                if(diffx < best->blo[j].getwidth() || diffy < best->blo[j].getheight())
+                {
+                    cerr << "wrong" << endl;
+                }
+            }
+            else if (diffx >= 0 && diffy < 0)
+            {
+                if(diffx < best->blo[j].getwidth() || abs(diffy) < best->blo[i].getheight())
+                {
+                    cerr << "wrong" << endl;
+                }
+            }
+            else if (diffx < 0 && diffy >= 0)
+            {
+                if(abs(diffx) < best->blo[i].getwidth() || diffy < best->blo[j].getheight())
+                {
+                    cerr << "wrong" << endl;
+                }
+            }
+            else
+            {
+                if(abs(diffx) < best->blo[i].getwidth() || abs(diffy) < best->blo[i].getheight())
+                {
+                    cerr << "wrong" << endl;
+                }                
+            }
+        }
+    }
+}
