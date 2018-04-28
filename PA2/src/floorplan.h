@@ -12,8 +12,8 @@
 #include<cstdlib>
 #include<random>
 #include<cfloat>
-// #include"gnuplot-iostream/gnuplot-iostream.h"
-// #include<boost/tuple/tuple.hpp>
+#include"gnuplot-iostream/gnuplot-iostream.h"
+#include<boost/tuple/tuple.hpp>
 using namespace std;
 
 class Block{

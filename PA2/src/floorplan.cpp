@@ -740,36 +740,36 @@ bool Floorplan::fitoutline()
 
     return (x2 <= x1) && (y2 <= y1);
 }
-// void Floorplan::gnuplot()
-// {
-//     Gnuplot plot;
-//     double xr = 1.2*max(outlineX,outlineY), yr = xr;
-//     plot << "set xrange [" << -0.1*xr << ":" << xr << "]" << endl;
-//     plot << "set yrange [" << -0.1*xr << ":" << xr << "]" << endl;
-//     plot << "set size ratio -1" << endl;
-//     plot << "set object 2 rect from 0,0 to " << outlineX
-//          << "," << outlineY << "fc rgb \"#CCFFFF\" back" << endl;
-//     for (int i = 0; i < numblocks; ++i) {
-//         Block b = best->blo[i];
-//         plot << " set label \"" << b.getname() << "\" at "
-//              << b.getxy(0)+b.getwidth()/2 << "," << b.getxy(1)+b.getheight()/2 << endl;
-//         plot << " set object " << i + 3 << " rect from "
-//              << b.getxy(0) << ","
-//              << b.getxy(1) << " to "
-//              << b.getxy(0)+b.getwidth() << ","
-//              << b.getxy(1)+b.getheight() << " fc rgb \"green\" " << endl;
-//     }
-//     for (int i = 0; i < numterminals; ++i) {
-//         Terminal* t = terminals[i];
-//         plot << " set object " << i + 3 + numblocks << " circle at "
-//              << t->getxy(0) << "," << t->getxy(1)
-//              << " size scr 0.01 fc rgb \"navy\"" << endl;
-//     }
-//     plot << " plot \'-\' using 1:2 t \"\" with line" << endl;
-//     plot << " 0 0" << endl;
-//     plot << " e" << endl;
-//     plot << " pause -1" << endl;
-// }
+void Floorplan::gnuplot()
+{
+    Gnuplot plot;
+    double xr = 1.2*max(outlineX,outlineY), yr = xr;
+    plot << "set xrange [" << -0.1*xr << ":" << xr << "]" << endl;
+    plot << "set yrange [" << -0.1*xr << ":" << xr << "]" << endl;
+    plot << "set size ratio -1" << endl;
+    plot << "set object 2 rect from 0,0 to " << outlineX
+         << "," << outlineY << "fc rgb \"#CCFFFF\" back" << endl;
+    for (int i = 0; i < numblocks; ++i) {
+        Block b = best->blo[i];
+        plot << " set label \"" << b.getname() << "\" at "
+             << b.getxy(0)+b.getwidth()/2 << "," << b.getxy(1)+b.getheight()/2 << endl;
+        plot << " set object " << i + 3 << " rect from "
+             << b.getxy(0) << ","
+             << b.getxy(1) << " to "
+             << b.getxy(0)+b.getwidth() << ","
+             << b.getxy(1)+b.getheight() << " fc rgb \"green\" " << endl;
+    }
+    for (int i = 0; i < numterminals; ++i) {
+        Terminal* t = terminals[i];
+        plot << " set object " << i + 3 + numblocks << " circle at "
+             << t->getxy(0) << "," << t->getxy(1)
+             << " size scr 0.01 fc rgb \"navy\"" << endl;
+    }
+    plot << " plot \'-\' using 1:2 t \"\" with line" << endl;
+    plot << " 0 0" << endl;
+    plot << " e" << endl;
+    plot << " pause -1" << endl;
+}
 void Floorplan::output(double t, const char* argv)
 {
     ofstream outfile(argv);
@@ -782,7 +782,7 @@ void Floorplan::output(double t, const char* argv)
     // }
     if(best->outx > outlineX || best->outy > outlineY)
     {
-        // swap(best->outx,best->outy);
+        swap(best->outx,best->outy);
         for (int i = 0; i < numblocks; ++i) 
         {
             best->blo[i].flip();
@@ -825,45 +825,5 @@ void Floorplan::output(double t, const char* argv)
     {
         cout << "x = "<<x << " best->outx = " << best->outx<<endl;
         cout << "y = "<<y << " best->outy = " << best->outy<<endl;
-    }
-}
-
-void Floorplan::check()
-{
-    for(int i = 0;i < numblocks-1;i++)
-    {
-        for (int j = 0;j < numblocks;j++)
-        {
-            double diffx = best->blo[i].getxy(0) - best->blo[j].getxy(0);
-            double diffy = best->blo[i].getxy(1) - best->blo[j].getxy(1);
-            if(diffx >= 0 && diffy >= 0)
-            {
-                if(diffx < best->blo[j].getwidth() || diffy < best->blo[j].getheight())
-                {
-                    cerr << "wrong" << endl;
-                }
-            }
-            else if (diffx >= 0 && diffy < 0)
-            {
-                if(diffx < best->blo[j].getwidth() || abs(diffy) < best->blo[i].getheight())
-                {
-                    cerr << "wrong" << endl;
-                }
-            }
-            else if (diffx < 0 && diffy >= 0)
-            {
-                if(abs(diffx) < best->blo[i].getwidth() || diffy < best->blo[j].getheight())
-                {
-                    cerr << "wrong" << endl;
-                }
-            }
-            else
-            {
-                if(abs(diffx) < best->blo[i].getwidth() || abs(diffy) < best->blo[i].getheight())
-                {
-                    cerr << "wrong" << endl;
-                }                
-            }
-        }
     }
 }
