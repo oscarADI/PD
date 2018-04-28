@@ -325,8 +325,9 @@ double Floorplan::Cost()
 int Floorplan::getRand()
 {
     random_device rd;
-    uniform_int_distribution<int> dist(0, numblocks - 1);
-    return dist(rd);
+    mt19937 gen(rd());
+    uniform_int_distribution<int> dis(0, numblocks - 1);
+    return dis(gen);
 }
 void Floorplan::perturb()
 {
@@ -644,7 +645,7 @@ void Floorplan::SA()
             double dcost = cost - prev;
             avgcost += abs(dcost);
             p = min(1.0,exp(-1*dcost/T));
-            if(dcost <= 0 || (getRand()%100+1)/100 < p)
+            if(dcost <= 0 || (double)(rand()%100+1)/100 < p)
             {
                 if(dcost > 0) uphill++;
                 store_result();
@@ -692,16 +693,16 @@ void Floorplan::SA()
     cout << "area = " << best->outx*best->outy << endl;
     cout << "wirelength = " << best->hpwl << endl;
     cout << endl;
-    turnbackbest();
-    for(int i = 0;i < numblocks;i++)
-    {
-        Block b = *blocks[i];
-        cout << b.getname() << " x = " << b.getxy(0) << ", y = "<<b.getxy(1)<<", rotate: "<<b.getrotate()<<endl;
-    }
-    cout << "cost = " << Cost() << endl;
-    cout << "area = " << finalX*finalY << endl;
-    cout << "wirelength = " << HPWL() << endl;
-    cout << endl;
+    // turnbackbest();
+    // for(int i = 0;i < numblocks;i++)
+    // {
+    //     Block b = *blocks[i];
+    //     cout << b.getname() << " x = " << b.getxy(0) << ", y = "<<b.getxy(1)<<", rotate: "<<b.getrotate()<<endl;
+    // }
+    // cout << "cost = " << Cost() << endl;
+    // cout << "area = " << finalX*finalY << endl;
+    // cout << "wirelength = " << HPWL() << endl;
+    // cout << endl;
 
 }
 double Floorplan::davg(int t)
