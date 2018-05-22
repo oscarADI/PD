@@ -16,18 +16,58 @@ void GlobalPlacer::place()
 	// if you use other methods, you can skip and delete it directly.
 	//////////////////////////////////////////////////////////////////
 
-	ExampleFunction ef; // require to define the object function and gradient function
+	ExampleFunction ef(_placement); // require to define the object function and gradient function
 
-    vector<double> x(2); // solution vector, size: num_blocks*2 
+    vector<double> x; // solution vector, size: num_blocks*2 
                          // each 2 variables represent the X and Y dimensions of a block
-    x[0] = 100; // initialize the solution vector
-    x[1] = 100;
+    // x[0] = 100; // initialize the solution vector
+    // x[1] = 100;
+    x.resize(2*_placement.numModules(),0);
+    // for(unsigned i = 0;i < _placement.numModules();i++)
+    // {
+    //     x[2*i] = ( _placement.boundryRight() + _placement.boundryLeft() )/ 2;
+    //     x[2*i + 1] = (_placement.boundryTop() + _placement.boundryBottom()) / 2;
+    //     x[2*i] = 0;
+    //     x[2*i + 1] = 0;
+    //     _placement.module(i).setPosition(x[2*i],x[2*i+1]);
+    // }
 
     NumericalOptimizer no(ef);
-    no.setX(x); // set initial solution
-    no.setNumIteration(35); // user-specified parameter
-    no.setStepSizeBound(5); // user-specified parameter
-    no.solve(); // Conjugate Gradient solver
+    
+    for(unsigned i = 0;i < 3;i++)
+    {
+        cout << "i = " << i << endl;
+        ef.setlamda(i*500);
+        no.setX(x); // set initial solution
+        no.setNumIteration(35); // user-specified parameter
+        no.setStepSizeBound(( _placement.boundryRight() - _placement.boundryLeft() )*5); // user-specified parameter
+        no.solve(); // Conjugate Gradient solver
+
+        for(unsigned j = 0;j < _placement.numModules();j++)
+        {
+            double newx = no.x(2*j);
+            double newy = no.x(2*j+1);
+
+            if(newx < _placement.boundryLeft()) 
+                newx = _placement.boundryLeft();
+            else if(newx + _placement.module(j).width() > _placement.boundryRight())
+                newx = _placement.boundryRight() - _placement.module(j).width();
+            
+            if(newy < _placement.boundryBottom()) 
+                newy = _placement.boundryBottom();
+            else if(newy + _placement.module(j).height() > _placement.boundryTop())
+                newy = _placement.boundryTop() - _placement.module(j).height();
+
+            _placement.module(j).setPosition(newx,newy);
+            x[2*j] = newx;
+            x[2*j + 1] = newy;
+        }
+        if(i == 0)  plotPlacementResult( "init0.plt" );
+        else if(i == 1) plotPlacementResult( "init1.plt" );
+        else if(i == 2) plotPlacementResult( "init2.plt" );
+        else if(i == 3) plotPlacementResult( "init3.plt" );
+        else if(i == 4) plotPlacementResult( "init4.plt" );
+    }
 
     cout << "Current solution:" << endl;
     for (unsigned i = 0; i < no.dimension(); i++) {
