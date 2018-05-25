@@ -3,6 +3,7 @@
 
 #include "NumericalOptimizerInterface.h"
 #include "Placement.h"
+#define _GLIBCXX_USE_CXX11_ABI 0
 
 class ExampleFunction : public NumericalOptimizerInterface
 {
@@ -13,11 +14,8 @@ public:
     void evaluateF(const vector<double> &x, double &f);
     unsigned dimension();
 
-    double compute_WA(const vector<double> &x);
-    double compute_WA_g(const vector<double> &x,vector<double> &g);
-    double compute_D(const vector<double> &x);
-    double compute_D_g(const vector<double> &x,vector<double> &g);
     void setlamda(double i) {_lamda = i;}
+    void debug();
 
 private:
     Placement& _placement;
